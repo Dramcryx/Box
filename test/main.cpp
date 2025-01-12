@@ -1,6 +1,7 @@
 #include "../Box.h"
 
 #include <cassert>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -19,8 +20,11 @@ struct Base1 : IBase {
 
 	int ImplSignature() override
 	{
-		return 1;
+		return *m_sig;
 	}
+
+private:
+	std::unique_ptr<int> m_sig{std::make_unique<int>(1)};
 };
 
 struct Base2 : IBase {

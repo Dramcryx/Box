@@ -124,6 +124,7 @@ public:
         Destroy();
 
         m_cachedPointer = new (&m_storage) TUnboxed{std::move(unboxedValue)};
+        m_mover = Mover<TUnboxed>;
 
         return *this;
     }
