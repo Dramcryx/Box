@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -43,6 +44,7 @@ public:
     inline BoxImpl(BoxImpl&& other) noexcept
     {
         Destroy();
+
         m_cachedPointer = other.m_mover(&other.m_storage, &m_storage);
         m_mover = other.m_mover;
     }
@@ -50,8 +52,10 @@ public:
     inline BoxImpl& operator=(BoxImpl&& other) noexcept
     {
         Destroy();
+
         m_cachedPointer = other.m_mover(&other.m_storage, &m_storage);
         m_mover = other.m_mover;
+
         return *this;
     }
 
@@ -74,6 +78,18 @@ public:
     inline ~BoxImpl()
     {
         Destroy();
+    }
+
+    template<typename TUnboxed>
+    inline BoxImpl& operator=(TUnboxed&& unboxedValue)
+    {
+        static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
+
+        Destroy();
+
+        m_cachedPointer = new (&m_storage) TUnboxed{std::move(unboxedValue)};
+
+        return *this;
     }
 
     inline TBoxed* operator->() noexcept
