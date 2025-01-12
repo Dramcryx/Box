@@ -18,14 +18,15 @@ struct CanBeBoxed {
 //
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment, typename TUnboxed>
 struct ValidBox {
-    static constexpr bool NonNullSizes         = TBoxedSize > 0 && TBoxedAlignment > 0;
-    static constexpr bool CorrectDeriviation   = std::is_base_of_v<TBoxed, TUnboxed>;
-    static constexpr bool CastablePointers     = std::is_convertible_v<TUnboxed*, TBoxed*>;
-    static constexpr bool HasVirtualDestructor = std::has_virtual_destructor_v<TUnboxed>;
-    static constexpr bool FitsSize             = sizeof(TUnboxed) >= sizeof(TBoxed);
-    static constexpr bool FitsBox              = TBoxedSize >= sizeof(TUnboxed);
-    static constexpr bool AlignedWithBox       = alignof(TUnboxed) % TBoxedAlignment == 0;
-    static constexpr bool IsNoexceptMovable    = std::is_nothrow_move_constructible_v<TUnboxed>;
+    static constexpr bool NonNullSizes           = TBoxedSize > 0 && TBoxedAlignment > 0;
+    static constexpr bool CorrectDeriviation     = std::is_base_of_v<TBoxed, TUnboxed>;
+    static constexpr bool CastablePointers       = std::is_convertible_v<TUnboxed*, TBoxed*>;
+    static constexpr bool HasVirtualDestructor   = std::has_virtual_destructor_v<TUnboxed>;
+    static constexpr bool FitsSize               = sizeof(TUnboxed) >= sizeof(TBoxed);
+    static constexpr bool FitsBox                = TBoxedSize >= sizeof(TUnboxed);
+    static constexpr bool AlignedWithBox         = alignof(TUnboxed) % TBoxedAlignment == 0;
+    static constexpr bool IsNoexceptMovable      = std::is_nothrow_move_constructible_v<TUnboxed>;
+    static constexpr bool IsNoexceptDestructible = std::is_nothrow_destructible_v<TUnboxed>;
 
     static constexpr bool Value =
         NonNullSizes &&
@@ -35,7 +36,8 @@ struct ValidBox {
         FitsSize &&
         FitsBox &&
         AlignedWithBox &&
-        IsNoexceptMovable;
+        IsNoexceptMovable &&
+        IsNoexceptDestructible;
 };
 
 // Alias to value of box checking result
@@ -109,7 +111,7 @@ public:
             "TUnobxed cannot be boxed into TBoxed");
     }
 
-    inline ~BoxImpl()
+    inline ~BoxImpl() noexcept
     {
         Destroy();
     }
@@ -141,7 +143,7 @@ private:
         return new (target) TUnboxed{std::move(*reinterpret_cast<TUnboxed*>(source))};
     }
 
-    inline void Destroy()
+    inline void Destroy() noexcept
     {
         if (m_cachedPointer)
         {
