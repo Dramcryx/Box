@@ -1,23 +1,29 @@
 #pragma once
 
 #include <cstddef>
-#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
+namespace dramcryx {
+
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment, typename TUnboxed>
 struct ValidBox {
-    static constexpr bool CorrectDeriviation = std::is_base_of_v<TBoxed, TUnboxed>;
-    static constexpr bool CastablePointers = std::is_convertible_v<TUnboxed*, TBoxed*>;
-    static constexpr bool HasVtable = std::is_polymorphic_v<TUnboxed>;
-    static constexpr bool FitsSize = sizeof(TUnboxed) >= sizeof(TBoxed);
-    static constexpr bool FitsBox = TBoxedSize >= sizeof(TUnboxed);
-    static constexpr bool AlignedWithBox = alignof(TUnboxed) % TBoxedAlignment == 0;
-    static constexpr bool IsNoexceptMovable = std::is_nothrow_move_constructible_v<TUnboxed>;
+    static constexpr bool CorrectDeriviation   = std::is_base_of_v<TBoxed, TUnboxed>;
+    static constexpr bool CastablePointers     = std::is_convertible_v<TUnboxed*, TBoxed*>;
+    static constexpr bool HasVirtualDestructor = std::has_virtual_destructor_v<TUnboxed>;
+    static constexpr bool FitsSize             = sizeof(TUnboxed) >= sizeof(TBoxed);
+    static constexpr bool FitsBox              = TBoxedSize >= sizeof(TUnboxed);
+    static constexpr bool AlignedWithBox       = alignof(TUnboxed) % TBoxedAlignment == 0;
+    static constexpr bool IsNoexceptMovable    = std::is_nothrow_move_constructible_v<TUnboxed>;
 
     static constexpr bool Value =
-        CorrectDeriviation && CastablePointers && HasVtable && FitsSize &&
-        FitsBox && AlignedWithBox && IsNoexceptMovable;
+        CorrectDeriviation &&
+        CastablePointers &&
+        HasVirtualDestructor &&
+        FitsSize &&
+        FitsBox &&
+        AlignedWithBox &&
+        IsNoexceptMovable;
 };
 
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment, typename TUnboxed>
@@ -36,37 +42,38 @@ public:
 
     inline BoxImpl(BoxImpl&& other) noexcept
     {
+        Destroy();
         m_cachedPointer = other.m_mover(&other.m_storage, &m_storage);
         m_mover = other.m_mover;
     }
 
+    inline BoxImpl& operator=(BoxImpl&& other) noexcept
+    {
+        Destroy();
+        m_cachedPointer = other.m_mover(&other.m_storage, &m_storage);
+        m_mover = other.m_mover;
+        return *this;
+    }
+
     template<typename TUnboxed, typename ... TArgs>
-    inline BoxImpl(BoxInplaceT<TUnboxed>, TArgs&& ... args)
+    inline BoxImpl(BoxInplaceT<TUnboxed>, TArgs&& ... args) :
+        m_cachedPointer{new (&m_storage) TUnboxed{std::forward<TArgs>(args)...}},
+        m_mover{Mover<TUnboxed>}
     {
         static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
-
-        TUnboxed* unboxed = new (&m_storage) TUnboxed{std::forward<TArgs>(args)...};
-
-        m_cachedPointer = unboxed;
-
-        m_mover = Mover<TUnboxed>;
     }
 
     template<typename TUnboxed>
-    inline BoxImpl(TUnboxed&& unboxedValue)
+    inline BoxImpl(TUnboxed&& unboxedValue) :
+        m_cachedPointer{new (&m_storage) TUnboxed{std::move(unboxedValue)}},
+        m_mover{Mover<TUnboxed>}
     {
         static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
-
-        TUnboxed* unboxed = new (&m_storage) TUnboxed{std::move(unboxedValue)};
-
-        m_cachedPointer = unboxed;
-
-        m_mover = Mover<TUnboxed>;
     }
 
     inline ~BoxImpl()
     {
-        m_cachedPointer->~TBoxed();
+        Destroy();
     }
 
     inline TBoxed* operator->() noexcept
@@ -76,15 +83,31 @@ public:
 
 private:
     template<typename TUnboxed>
-    static TBoxed* Mover(void* base, void* other) noexcept
+    static TBoxed* Mover(void* source, void* target) noexcept
     {
-        TUnboxed* ptr = new (other) TUnboxed{std::move(*reinterpret_cast<TUnboxed*>(base))};
-        return ptr;
+        return new (target) TUnboxed{std::move(*reinterpret_cast<TUnboxed*>(source))};
     }
 
-    TBoxed* m_cachedPointer = nullptr;
-    TBoxedMover* m_mover = nullptr;
+    inline void Destroy()
+    {
+        if (m_cachedPointer)
+        {
+            std::exchange(m_cachedPointer, nullptr)->~TBoxed();
+        }
+    }
+
+    // To trick around MSVC being able to align right introducing left padding,
+    // storage for the object goes first.
+    //
     alignas(TBoxedAlignment) unsigned char m_storage[TBoxedSize] {'\0'};
+
+    // Casted object pointer in case of multiple inheritance.
+    //
+    TBoxed* m_cachedPointer = nullptr;
+
+    // Move constructor wrapper.
+    //
+    TBoxedMover* m_mover = nullptr;
 };
 
 template <typename T>
@@ -95,3 +118,5 @@ struct BoxSize {
 
 template <typename TBoxed>
 using Box = BoxImpl<TBoxed, BoxSize<TBoxed>::Size, BoxSize<TBoxed>::Alignment>;
+
+} // namespace dramcryx

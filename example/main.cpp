@@ -25,8 +25,8 @@ int main()
 
     srand(42);
 
-    constexpr std::size_t CountCreated = 1000000;
-    constexpr std::size_t CountAccessed = 25000;
+    static constexpr std::size_t CountCreated = 1000000;
+    static constexpr std::size_t CountAccessed = 25000;
 
 #define NOW std::chrono::high_resolution_clock::now()
 #define DURATION(x) std::chrono::duration_cast<std::chrono::milliseconds>(x##End - x##Begin).count()
@@ -63,7 +63,7 @@ int main()
     }();
 
     auto boxes = []{
-        std::vector<IBoxableBox> boxes;
+        std::vector<dramcryx::Box<IBoxable>> boxes;
         boxes.reserve(CountCreated);
 
         auto constructedBegin = NOW;

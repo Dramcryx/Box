@@ -3,23 +3,23 @@
 
 int Boxable::WriteBoxed()
 {
-    std::cout << __PRETTY_FUNCTION__ << "\n";
+    std::cout << __FUNCTION__ << "\n";
     return 1;
 }
 
 int Boxable2::WriteBoxed()
 {
-    std::cout << __PRETTY_FUNCTION__ << "\n";
+    std::cout << __FUNCTION__ << "\n";
     return 1;
 }
 
 int VirtualBoxed::WriteBoxed()
 {
-    std::cout << __PRETTY_FUNCTION__ << "\n";
+    std::cout << __FUNCTION__ << "\n";
     return 1;
 }
 
-IBoxableBox BoxCreator()
+dramcryx::Box<IBoxable> BoxCreator()
 {
-    return IBoxableBox{VirtualBoxed{}};
+    return dramcryx::Box<IBoxable>{VirtualBoxed{}};
 }

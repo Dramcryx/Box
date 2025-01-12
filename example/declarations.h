@@ -47,11 +47,9 @@ public:
 };
 
 template <>
-struct BoxSize<IBoxable> {
-    static constexpr std::size_t Size = 24;
+struct dramcryx::BoxSize<IBoxable> {
+    static constexpr std::size_t Size = 48;
     static constexpr std::size_t Alignment = 8;
 };
 
-using IBoxableBox = Box<IBoxable>;
-
-IBoxableBox BoxCreator();
+dramcryx::Box<IBoxable> BoxCreator();
