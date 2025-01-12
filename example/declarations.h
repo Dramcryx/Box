@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../Box.h"
-#include <cstddef>
 
 struct SizedSomething {
     std::size_t Member = 1;

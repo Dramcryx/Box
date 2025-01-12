@@ -7,8 +7,18 @@
 
 namespace dramcryx {
 
+// Basic requirement for boxable interface is to have a virtual destructor
+//
+template <typename TBoxed>
+struct CanBeBoxed {
+    static constexpr bool Value = std::has_virtual_destructor_v<TBoxed>;
+};
+
+// Requirements for a type that is being boxed as an interface
+//
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment, typename TUnboxed>
 struct ValidBox {
+    static constexpr bool NonNullSizes         = TBoxedSize > 0 && TBoxedAlignment > 0;
     static constexpr bool CorrectDeriviation   = std::is_base_of_v<TBoxed, TUnboxed>;
     static constexpr bool CastablePointers     = std::is_convertible_v<TUnboxed*, TBoxed*>;
     static constexpr bool HasVirtualDestructor = std::has_virtual_destructor_v<TUnboxed>;
@@ -18,6 +28,7 @@ struct ValidBox {
     static constexpr bool IsNoexceptMovable    = std::is_nothrow_move_constructible_v<TUnboxed>;
 
     static constexpr bool Value =
+        NonNullSizes &&
         CorrectDeriviation &&
         CastablePointers &&
         HasVirtualDestructor &&
@@ -27,20 +38,35 @@ struct ValidBox {
         IsNoexceptMovable;
 };
 
+// Alias to value of box checking result
+//
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment, typename TUnboxed>
 static constexpr bool ValidBoxV = ValidBox<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>::Value;
 
+// Tag type to allow inplace construction of boxed object
+//
 template <typename T>
 struct BoxInplaceT {};
 
+// Implementation of the box
+//
 template <typename TBoxed, std::size_t TBoxedSize, std::size_t TBoxedAlignment>
 class BoxImpl
 {
+    static_assert(CanBeBoxed<TBoxed>::Value, "Cannot box TBoxed type");
+
+    // Function type that is used to move boxes
+    //
     using TBoxedMover = TBoxed*(void*, void*);
 
 public:
+    // Do not allow default constructors
+    //
     BoxImpl() = delete;
 
+    // Move constructor. Destroys current object if any,
+    // and moves other one into current storage.
+    //
     inline BoxImpl(BoxImpl&& other) noexcept
     {
         Destroy();
@@ -49,6 +75,9 @@ public:
         m_mover = other.m_mover;
     }
 
+    // Move-assignment operator. Destroys current object if any,
+    // and moves other one into current storage.
+    //
     inline BoxImpl& operator=(BoxImpl&& other) noexcept
     {
         Destroy();
@@ -58,13 +87,16 @@ public:
 
         return *this;
     }
-
+    // Inplace construction of a boxed object
+    //
     template<typename TUnboxed, typename ... TArgs>
     inline BoxImpl(BoxInplaceT<TUnboxed>, TArgs&& ... args) :
         m_cachedPointer{new (&m_storage) TUnboxed{std::forward<TArgs>(args)...}},
         m_mover{Mover<TUnboxed>}
     {
-        static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
+        static_assert(
+            ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>,
+            "TUnobxed cannot be boxed into TBoxed");
     }
 
     template<typename TUnboxed>
@@ -72,7 +104,9 @@ public:
         m_cachedPointer{new (&m_storage) TUnboxed{std::move(unboxedValue)}},
         m_mover{Mover<TUnboxed>}
     {
-        static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
+        static_assert(
+            ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>,
+            "TUnobxed cannot be boxed into TBoxed");
     }
 
     inline ~BoxImpl()
@@ -83,7 +117,9 @@ public:
     template<typename TUnboxed>
     inline BoxImpl& operator=(TUnboxed&& unboxedValue)
     {
-        static_assert(ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>, "TUnobxed cannot be boxed into TBoxed");
+        static_assert(
+            ValidBoxV<TBoxed, TBoxedSize, TBoxedAlignment, TUnboxed>,
+            "TUnobxed cannot be boxed into TBoxed");
 
         Destroy();
 
@@ -126,12 +162,18 @@ private:
     TBoxedMover* m_mover = nullptr;
 };
 
-template <typename T>
+// Helper type for defining a box size.
+// Box users should define them as a full template specialization
+// where TBoxed is a type of desired interface.
+//
+template <typename TBoxed>
 struct BoxSize {
     static constexpr std::size_t Alignment = 0;
-    static constexpr std::size_t Size = -1;
+    static constexpr std::size_t Size = 0;
 };
 
+// Final box type for users
+//
 template <typename TBoxed>
 using Box = BoxImpl<TBoxed, BoxSize<TBoxed>::Size, BoxSize<TBoxed>::Alignment>;
 
