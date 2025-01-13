@@ -89,6 +89,7 @@ public:
 
         return *this;
     }
+
     // Inplace construction of a boxed object
     //
     template<typename TUnboxed, typename ... TArgs>
@@ -101,6 +102,8 @@ public:
             "TUnobxed cannot be boxed into TBoxed");
     }
 
+    // Construction from an object to be boxed
+    //
     template<typename TUnboxed>
     inline BoxImpl(TUnboxed&& unboxedValue) :
         m_cachedPointer{new (&m_storage) TUnboxed{std::move(unboxedValue)}},
@@ -111,11 +114,15 @@ public:
             "TUnobxed cannot be boxed into TBoxed");
     }
 
+    // Destructor. Just destroy held object.
+    //
     inline ~BoxImpl() noexcept
     {
         Destroy();
     }
 
+    // Assignment of a new object to be boxed
+    //
     template<typename TUnboxed>
     inline BoxImpl& operator=(TUnboxed&& unboxedValue)
     {
@@ -131,18 +138,24 @@ public:
         return *this;
     }
 
+    // Main operator to access held interface
+    //
     inline TBoxed* operator->() noexcept
     {
         return m_cachedPointer;
     }
 
 private:
+    // Implementation of a wrapper around move constructor for help object
+    //
     template<typename TUnboxed>
     static TBoxed* Mover(void* source, void* target) noexcept
     {
         return new (target) TUnboxed{std::move(*reinterpret_cast<TUnboxed*>(source))};
     }
 
+    // Helper method to destroy held object
+    //
     inline void Destroy() noexcept
     {
         if (m_cachedPointer)
